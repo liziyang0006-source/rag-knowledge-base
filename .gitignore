@@ -1,0 +1,30 @@
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# 环境变量（敏感信息，切勿提交）
+.env
+
+# IDE
+.idea/
+.vscode/
+
+# 日志与系统文件
+*.log
+.DS_Store
+Thumbs.db
+
+
+# 本地向量库（二进制产物，克隆后自行入库生成）
+data/vectorstore/
+data/uploads/
