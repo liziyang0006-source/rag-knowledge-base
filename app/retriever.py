@@ -1,13 +1,18 @@
+from functools import lru_cache
+
 from dotenv import load_dotenv
 from langchain_chroma import Chroma
+
 from app.embedding import get_embeddings
 from app.vectorstore import PERSIST_DIR
-from functools import lru_cache
+from app.reranker import rerank
+
+load_dotenv()
+
 
 def refresh_vectorstore():
     """清掉 get_vectorstore 的缓存
-    向量库被 create_vectorstore/run 脚本重建后，先调用本函数，
-    再检索才不会读到重建前的旧集合/旧索引。"""
+    向量库被重建后先调用本函数，再检索才不会读到旧集合/旧索引。"""
     get_vectorstore.cache_clear()
 
 
@@ -20,16 +25,33 @@ def get_vectorstore():
     )
 
 
-def search(query: str, top_k: int = 3, threshold: float = 1.26):
-    """把问题变成向量，检索最相关的 top_k 个 chunk；相似度低于阈值的丢弃
+def search(query: str, top_k: int = 3, threshold: float = 0.3, recall_k: int = 20):
+    """两阶段检索：向量召回 → rerank 精排 → 分数过滤 → 取 top_k
 
-    注意：Chroma 的分数是距离，越小越相似。
-    threshold=1.26 表示只保留距离 <= 1.26 的片段。
+    第一阶段（召回）：向量检索快速捞出 recall_k 个候选，粗筛、追求不漏。
+    第二阶段（重排）：rerank 模型对候选重新打分排序，相关性判断更准。
+    最后按 rerank 分数过滤（低于 threshold 视为不相关），返回前 top_k 个。
+
+    注意：rerank 分数约在 0-1，越大越相关，方向与向量距离相反。
     """
     vectorstore = get_vectorstore()
-    # 多捞一些再过滤，防止过滤后不够数
-    scored = vectorstore.similarity_search_with_score(query, k=top_k * 3)
-    # 过滤：只保留"距离 <= 阈值"的片段。距离越小代表越相关，距离过大说明基本无关，直接丢弃。
-    # 因为过滤可能砍掉一部分，所以上面多捞了 top_k*3 个，避免过滤后数量不够 top_k。
-    filtered = [(doc, score) for doc, score in scored if score <= threshold]
-    return [doc for doc, _ in filtered[:top_k]]
+
+    # 第一阶段：向量召回，多捞一些候选，避免漏掉真正相关的片段
+    candidates = vectorstore.similarity_search(query, k=recall_k)
+    if not candidates:
+        return []
+
+    # 第二阶段：rerank 精排，返回 [(score, index, text)]，已按分数降序
+    texts = [c.page_content for c in candidates]
+    ranked = rerank(query, texts, top_n=min(len(texts), 50))
+
+    # 按 rerank 分数过滤 + 取 top_k；用 index 精确映射回原 Document（保留 metadata）
+    docs = []
+    for score, idx, _text in ranked:
+        if score < threshold:
+            continue
+        docs.append(candidates[idx])
+        if len(docs) >= top_k:
+            break
+
+    return docs

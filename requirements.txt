@@ -9,3 +9,4 @@ pypdf
 pdfplumber
 python-dotenv
 openai
+requests
