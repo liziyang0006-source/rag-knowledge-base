@@ -13,14 +13,14 @@
 
 ## 技术栈
 
-| 组件 | 技术 |
-|------|------|
-| 语言 | Python |
-| 框架 | LangChain |
-| 向量库 | ChromaDB |
-| 嵌入模型 | BAAI/bge-m3（硅基流动） |
-| 对话模型 | Qwen/Qwen2.5-7B-Instruct（硅基流动） |
-| 前端 | Streamlit |
+| 组件 | 技术                 |
+|------|--------------------|
+| 语言 | Python             |
+| 框架 | LangChain          |
+| 向量库 | ChromaDB           |
+| 嵌入模型 | BAAI/bge-m3（硅基流动）  |
+| 对话模型 | Qwen/Qwen3-8B（硅基流动） |
+| 前端 | Streamlit          |
 
 ## 项目结构
 
@@ -71,7 +71,7 @@ copy .env.example .env
 SILICONFLOW_API_KEY=你的密钥
 SILICONFLOW_BASE_URL=https://api.siliconflow.cn/v1
 SILICONFLOW_EMBEDDING_MODEL=BAAI/bge-m3
-SILICONFLOW_LLM_MODEL=Qwen/Qwen2.5-7B-Instruct
+SILICONFLOW_LLM_MODEL=Qwen/Qwen3-8B
 ```
 
 > ⚠️ `.env` 包含敏感密钥，已被 `.gitignore` 排除，**切勿提交到仓库**。
