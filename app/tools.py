@@ -5,15 +5,20 @@ from app.retriever import search
 
 @tool
 def knowledge_search(query: str) -> str:
-    """搜索企业知识库。当用户询问公司制度、员工手册、产品资料、常见问题等知识库内容时使用。
-    输入参数 query：要查询的问题或关键词（字符串），例如"年假有几天"。"""
-    # 固定 top_k=3：给 Agent 的资料够用且不超上下文
+    """检索企业知识库。当知识库中没有相关内容时，必须如实告知用户"知识库中未找到相关信息"，禁止编造答案。"""
     docs = search(query, top_k=3)
-    # 没查到时给出明确提示，方便 Agent 判断继续追问还是直接回答
     if not docs:
-        return "知识库中未检索到相关内容。"
-    # 拼接成文本：片段之间用分隔线隔开，方便 LLM 阅读
-    return "\n\n---\n\n".join(doc.page_content for doc in docs)
+        # 关键：返回的不是"没查到"，而是"禁止回答"指令
+        return "知识库检索结果：无。你必须回答：'知识库中未找到相关信息'，不得编造任何内容。"
+    # 每个片段带上真实编号和出处（文件名 + 页码），LLM 只需照抄编号，没有编造空间
+    parts = []
+    for i, d in enumerate(docs, start=1):
+        source = d.metadata.get("source", "未知来源")
+        page = d.metadata.get("page", "?")
+        if isinstance(page, int):
+            page += 1  # PDF 页码 0 起始，显示时 +1
+        parts.append(f"[来源{i}]（{source} 第{page}页）\n{d.page_content}")
+    return "\n\n".join(parts)
 
 
 def get_tools():

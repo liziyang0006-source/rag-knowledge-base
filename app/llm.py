@@ -15,6 +15,10 @@ def get_llm():
         api_key=os.getenv("SILICONFLOW_API_KEY"),
         base_url=os.getenv("SILICONFLOW_BASE_URL"),
         temperature=0.1,
+        # 关闭 Qwen3 思考模式，加速推理。
+        # 注意：chat_template_kwargs 是 vLLM 本地部署的参数，硅基流动不认，
+        # 必须走 extra_body 把 enable_thinking 放进请求体
+        extra_body={"enable_thinking": False},
     )
 
 if __name__ == "__main__":
