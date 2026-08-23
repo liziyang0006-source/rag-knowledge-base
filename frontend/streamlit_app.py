@@ -15,7 +15,8 @@ from app.loader import load_document          # 文档解析（PDF/TXT/MD）
 from app.splitter import split_documents      # 切块
 from app.vectorstore import create_vectorstore  # 入库（写入 Chroma）
 from app.retriever import refresh_vectorstore   # 清检索缓存
-from app.chain import ask                     # 完整问答（检索 + 生成）
+from app.agent import create_agent            # Agent 版问答
+from langchain_core.messages import HumanMessage, ToolMessage
 
 # 上传文件临时保存目录
 UPLOAD_DIR = os.path.join(PROJECT_ROOT, "data", "uploads")
@@ -23,13 +24,19 @@ UPLOAD_DIR = os.path.join(PROJECT_ROOT, "data", "uploads")
 # ---------- 页面基本配置 ----------
 st.set_page_config(page_title="企业知识库智能问答助手", page_icon="📚", layout="centered")
 
+# ---------- 缓存 Agent 实例 ----------
+# Streamlit 每次交互都会重跑整个脚本，不缓存的话每次提问都要重建 Agent，非常慢
+@st.cache_resource
+def get_agent():
+    return create_agent()
+
 # ---------- 会话状态：保存最近一次问答，避免页面重跑后丢失 ----------
 if "last_query" not in st.session_state:
     st.session_state.last_query = ""
 if "last_answer" not in st.session_state:
     st.session_state.last_answer = None
-if "last_docs" not in st.session_state:
-    st.session_state.last_docs = []
+if "last_sources" not in st.session_state:
+    st.session_state.last_sources = []
 
 # ==================== 页头 ====================
 st.title("📚 企业知识库智能问答助手")
@@ -92,13 +99,37 @@ query = st.text_input(
 
 if st.button("🚀 提问", type="primary", disabled=not query.strip()):
     try:
-        with st.spinner("正在检索资料并生成答案..."):
-            # 完整问答：内部会先检索 top_k 个片段，再调用大模型
-            answer, docs = ask(query.strip(), top_k=3)
-        # 存进会话状态，页面上其他操作（如入库）触发重跑时答案不丢
+        agent = get_agent()
+        # 进度条：随 Agent 消息流推进（决策 → 检索 → 生成），比纯 spinner 直观
+        progress = st.progress(0, text="🤔 已收到问题，开始处理...")
+
+        messages = []
+        # stream_mode="values"：每产生一条新消息就吐一次完整状态，最后一条即最新消息
+        for state in agent.stream(
+            {"messages": [HumanMessage(content=query.strip())]},
+            stream_mode="values",
+        ):
+            msg = state["messages"][-1]
+            messages.append(msg)
+            # 按消息类型推进进度：不同类型对应 Agent 流程的不同阶段
+            if isinstance(msg, HumanMessage):
+                progress.progress(10, text="🤔 已收到问题...")
+            elif isinstance(msg, ToolMessage):
+                progress.progress(60, text="📚 已检索到资料，正在生成答案...")
+            elif getattr(msg, "tool_calls", None):
+                progress.progress(30, text="🔍 正在检索知识库...")
+            else:
+                progress.progress(90, text="✍️ 正在组织最终答案...")
+
+        progress.progress(100, text="✅ 回答完成")
+        # 最终答案 = 最后一条消息的内容
         st.session_state.last_query = query.strip()
-        st.session_state.last_answer = answer
-        st.session_state.last_docs = docs
+        st.session_state.last_answer = messages[-1].content
+        # 来源片段 = 所有 ToolMessage 的 content（带编号的检索文本）
+        st.session_state.last_sources = [
+            m.content for m in messages if isinstance(m, ToolMessage)
+        ]
+        progress.empty()  # 完成后移除进度条，页面干净
     except Exception as e:
         st.error(f"提问失败：{e}\n\n如果还没入库过任何文档，请先在左侧上传并入库。")
 
@@ -111,17 +142,16 @@ if st.session_state.last_answer is not None:
         unsafe_allow_html=True,
     )
 
-    if not st.session_state.last_docs:
-        st.info("没有检索到任何相关片段，可能是向量库还是空的。")
+    # 来源：从工具返回的字符串里解析；空/拒答时给出提示
+    sources = st.session_state.last_sources
+    no_result = (not sources) or any(
+        ("检索结果：空" in s) or ("未找到" in s) for s in sources
+    )
+    if no_result:
+        st.info("知识库中没有相关文档，无法回答该问题。")
 
-    # 来源：每个片段一个可展开的折叠块
-    if st.session_state.last_docs:
+    if sources and not no_result:
         st.subheader("参考来源")
-        for i, doc in enumerate(st.session_state.last_docs, start=1):
-            source = doc.metadata.get("source", "未知来源")
-            page = doc.metadata.get("page", "")
-            title = f"来源 {i}：{os.path.basename(str(source))}"
-            if page != "":
-                title += f"（第 {page + 1 if isinstance(page, int) else page} 页）"
-            with st.expander(title):
-                st.write(doc.page_content)
+        for i, s in enumerate(sources, start=1):
+            with st.expander(f"来源 {i}"):
+                st.write(s)
