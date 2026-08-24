@@ -14,10 +14,13 @@ def knowledge_search(query: str) -> str:
     parts = []
     for i, d in enumerate(docs, start=1):
         source = d.metadata.get("source", "未知来源")
-        page = d.metadata.get("page", "?")
+        page = d.metadata.get("page")
         if isinstance(page, int):
             page += 1  # PDF 页码 0 起始，显示时 +1
-        parts.append(f"[来源{i}]（{source} 第{page}页）\n{d.page_content}")
+            loc = f"{source} 第{page}页"
+        else:
+            loc = source  # txt/md 没有 page 字段，不显示页码
+        parts.append(f"[来源{i}]（{loc}）\n{d.page_content}")
     return "\n\n".join(parts)
 
 
