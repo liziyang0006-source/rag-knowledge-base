@@ -1,0 +1,34 @@
+# 虚拟环境（体积巨大，绝不能进镜像）
+.venv/
+
+# 敏感配置（通过 compose 的 env_file 注入，不打包进镜像）
+.env
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# 测试与工具缓存
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 构建产物
+*.egg-info/
+dist/
+build/
+
+# 版本控制与 IDE 配置
+.git/
+.idea/
+.vscode/
+
+# 本地数据（运行时通过 volume 挂载，不打包进镜像）
+data/vectorstore/
+data/uploads/
+
+# 一次性诊断脚本
+tests/diag_eval.py

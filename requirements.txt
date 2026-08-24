@@ -12,3 +12,5 @@ openai
 requests
 rank-bm25
 jieba
+fastapi
+uvicorn
