@@ -1,3 +1,8 @@
+import os
+import sys
+# 把项目根目录加进 sys.path，保证直接运行本脚本时也能 import app 包
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from app.loader import load_document
 from app.splitter import split_documents
 from app.vectorstore import create_vectorstore

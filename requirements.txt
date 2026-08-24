@@ -10,3 +10,5 @@ pdfplumber
 python-dotenv
 openai
 requests
+rank-bm25
+jieba
